@@ -27,6 +27,8 @@
  * $FreeBSD$
  */
 
+ #include <sys/cdefs.h>
+
 #include <sys/param.h>
 #include <sys/queue.h>
 #include <sys/errno.h>
@@ -47,6 +49,7 @@
 #include <xhyve/xhyve.h>
 #include <xhyve/mevent.h>
 #include <xhyve/block_if.h>
+#include <xhyve/libvdsk/vdsk.h>
 
 #define BLOCKIF_SIG 0xb109b109
 /* xhyve: FIXME
@@ -88,19 +91,13 @@ struct blockif_elem {
 
 struct blockif_ctxt {
 	int bc_magic;
-	int bc_fd;
-	int bc_ischr;
-	int bc_isgeom;
 	int bc_candelete;
 	int bc_rdonly;
-	off_t bc_size;
-	int bc_sectsz;
-	int bc_psectsz;
-	int bc_psectoff;
 	int bc_closing;
 	pthread_t bc_btid[BLOCKIF_NUMTHR];
 	pthread_mutex_t bc_mtx;
 	pthread_cond_t bc_cond;
+	
 	/* Request elements and free/pending/busy queues */
 	TAILQ_HEAD(, blockif_elem) bc_freeq;
 	TAILQ_HEAD(, blockif_elem) bc_pendq;
@@ -120,26 +117,6 @@ struct blockif_sig_elem {
 static struct blockif_sig_elem *blockif_bse_head;
 
 #pragma clang diagnostic pop
-
-static ssize_t
-preadv(int fd, const struct iovec *iov, int iovcnt, off_t offset)
-{
-	off_t res;
-
-	res = lseek(fd, offset, SEEK_SET);
-	assert(res == offset);
-	return readv(fd, iov, iovcnt);
-}
-
-static ssize_t
-pwritev(int fd, const struct iovec *iov, int iovcnt, off_t offset)
-{
-	off_t res;
-
-	res = lseek(fd, offset, SEEK_SET);
-	assert(res == offset);
-	return writev(fd, iov, iovcnt);
-}
 
 static int
 blockif_enqueue(struct blockif_ctxt *bc, struct blockif_req *breq,
@@ -228,9 +205,7 @@ static void
 blockif_proc(struct blockif_ctxt *bc, struct blockif_elem *be, uint8_t *buf)
 {
 	struct blockif_req *br;
-	// off_t arg[2];
-	ssize_t clen, len, off, boff, voff;
-	int i, err;
+	int err;
 
 	br = be->be_req;
 	if (br->br_iovcnt <= 1)
@@ -238,105 +213,16 @@ blockif_proc(struct blockif_ctxt *bc, struct blockif_elem *be, uint8_t *buf)
 	err = 0;
 	switch (be->be_op) {
 	case BOP_READ:
-		if (buf == NULL) {
-			if ((len = preadv(bc->bc_fd, br->br_iov, br->br_iovcnt,
-				   br->br_offset)) < 0)
-				err = errno;
-			else
-				br->br_resid -= len;
-			break;
-		}
-		i = 0;
-		off = voff = 0;
-		while (br->br_resid > 0) {
-			len = MIN(br->br_resid, MAXPHYS);
-			if (pread(bc->bc_fd, buf, ((size_t) len), br->br_offset + off) < 0)
-			{
-				err = errno;
-				break;
-			}
-			boff = 0;
-			do {
-				clen = MIN((len - boff),
-					(((ssize_t) br->br_iov[i].iov_len) - voff));
-				memcpy(((void *) (((uintptr_t) br->br_iov[i].iov_base) +
-					((size_t) voff))), buf + boff, clen);
-				if (clen < (((ssize_t) br->br_iov[i].iov_len) - voff))
-					voff += clen;
-				else {
-					i++;
-					voff = 0;
-				}
-				boff += clen;
-			} while (boff < len);
-			off += len;
-			br->br_resid -= len;
-		}
+		err = vdsk_read(bc, br->br_offset, br->br_iov, br->br_iovcnt);
 		break;
 	case BOP_WRITE:
-		if (bc->bc_rdonly) {
-			err = EROFS;
-			break;
-		}
-		if (buf == NULL) {
-			if ((len = pwritev(bc->bc_fd, br->br_iov, br->br_iovcnt,
-				    br->br_offset)) < 0)
-				err = errno;
-			else
-				br->br_resid -= len;
-			break;
-		}
-		i = 0;
-		off = voff = 0;
-		while (br->br_resid > 0) {
-			len = MIN(br->br_resid, MAXPHYS);
-			boff = 0;
-			do {
-				clen = MIN((len - boff),
-					(((ssize_t) br->br_iov[i].iov_len) - voff));
-				memcpy((buf + boff),
-					((void *) (((uintptr_t) br->br_iov[i].iov_base) +
-						((size_t) voff))), clen);
-				if (clen < (((ssize_t) br->br_iov[i].iov_len) - voff))
-					voff += clen;
-				else {
-					i++;
-					voff = 0;
-				}
-				boff += clen;
-			} while (boff < len);
-			if (pwrite(bc->bc_fd, buf, ((size_t) len), br->br_offset +
-			    off) < 0) {
-				err = errno;
-				break;
-			}
-			off += len;
-			br->br_resid -= len;
-		}
+		err = vdsk_write(bc, br->br_offset, br->br_iov, br->br_iovcnt);
 		break;
 	case BOP_FLUSH:
-		if (bc->bc_ischr) {
-			if (ioctl(bc->bc_fd, DKIOCSYNCHRONIZECACHE))
-				err = errno;
-		} else if (fsync(bc->bc_fd))
-			err = errno;
+		err = vdsk_flush(bc);
 		break;
 	case BOP_DELETE:
-		if (!bc->bc_candelete) {
-			err = EOPNOTSUPP;
-		// } else if (bc->bc_rdonly) {
-		// 	err = EROFS;
-		// } else if (bc->bc_ischr) {
-		// 	arg[0] = br->br_offset;
-		// 	arg[1] = br->br_resid;
-		// 	if (ioctl(bc->bc_fd, DIOCGDELETE, arg)) {
-		// 		err = errno;
-		// 	} else {
-		// 		br->br_resid = 0;
-		// 	}
-		} else {
-			err = EOPNOTSUPP;
-		}
+		err = vdsk_trim(bc, br->br_offset, br->br_resid);
 		break;
 	}
 
@@ -351,20 +237,15 @@ blockif_thr(void *arg)
 	struct blockif_ctxt *bc;
 	struct blockif_elem *be;
 	pthread_t t;
-	uint8_t *buf;
 
 	bc = arg;
-	if (bc->bc_isgeom)
-		buf = malloc(MAXPHYS);
-	else
-		buf = NULL;
 	t = pthread_self();
 
 	pthread_mutex_lock(&bc->bc_mtx);
 	for (;;) {
 		while (blockif_dequeue(bc, t, &be)) {
 			pthread_mutex_unlock(&bc->bc_mtx);
-			blockif_proc(bc, be, buf);
+			blockif_proc(bc, be, NULL);
 			pthread_mutex_lock(&bc->bc_mtx);
 			blockif_complete(bc, be);
 		}
@@ -375,8 +256,6 @@ blockif_thr(void *arg)
 	}
 	pthread_mutex_unlock(&bc->bc_mtx);
 
-	if (buf)
-		free(buf);
 	pthread_exit(NULL);
 	return (NULL);
 }
@@ -415,26 +294,21 @@ blockif_init(void)
 }
 
 struct blockif_ctxt *
-blockif_open(const char *optstr, UNUSED const char *ident)
+blockif_open(const char *optstr, const char *ident)
 {
-	// char name[MAXPATHLEN];
+	char tname[MAXCOMLEN + 1];
 	char *nopt, *xopts, *cp;
 	struct blockif_ctxt *bc;
-	struct stat sbuf;
-	// struct diocgattr_arg arg;
-	off_t size, psectsz, psectoff;
-	int extra, fd, i, sectsz;
-	int nocache, sync, ro, candelete, geom, ssopt, pssopt;
+	int extra, i;
+	int nocache, sync, ro, ssopt, pssopt;
 
 	pthread_once(&blockif_once, blockif_init);
 
-	fd = -1;
 	ssopt = 0;
 	nocache = 0;
 	sync = 0;
 	ro = 0;
 
-	pssopt = 0;
 	/*
 	 * The first element in the optstring is always a pathname.
 	 * Optional elements follow
@@ -456,110 +330,33 @@ blockif_open(const char *optstr, UNUSED const char *ident)
 			pssopt = ssopt;
 		else {
 			fprintf(stderr, "Invalid device option \"%s\"\n", cp);
-			goto err;
+			return (NULL);
 		}
 	}
 
 	extra = 0;
 	if (nocache) {
 		perror("xhyve: nocache support unimplemented");
-		goto err;
-		// extra |= O_DIRECT;
+		return (NULL);
 	}
 	if (sync)
 		extra |= O_SYNC;
 
-	fd = open(nopt, (ro ? O_RDONLY : O_RDWR) | extra);
-	if (fd < 0 && !ro) {
+	bc = vdsk_open(nopt, (ro ? O_RDONLY : O_RDWR) | extra, sizeof(*bc));
+	if (bc == NULL && !ro) {
 		/* Attempt a r/w fail with a r/o open */
-		fd = open(nopt, O_RDONLY | extra);
+		bc = vdsk_open(nopt, O_RDONLY | extra, sizeof(*bc));
 		ro = 1;
 	}
 
-	if (fd < 0) {
-		perror("Could not open backing file");
-		goto err;
-	}
-
-	if (fstat(fd, &sbuf) < 0) {
-		perror("Could not stat backing file");
-		goto err;
-	}
-
-    /*
-	 * Deal with raw devices
-	 */
-	size = sbuf.st_size;
-	sectsz = DEV_BSIZE;
-	psectsz = psectoff = 0;
-	candelete = geom = 0;
-	if (S_ISCHR(sbuf.st_mode)) {
-		perror("xhyve: raw device support unimplemented");
-		goto err;		
-		// if (ioctl(fd, DIOCGMEDIASIZE, &size) < 0 ||
-		// 	ioctl(fd, DIOCGSECTORSIZE, &sectsz))
-		// {
-		// 	perror("Could not fetch dev blk/sector size");
-		// 	goto err;
-		// }
-		// assert(size != 0);
-		// assert(sectsz != 0);
-		// if (ioctl(fd, DIOCGSTRIPESIZE, &psectsz) == 0 && psectsz > 0)
-		// 	ioctl(fd, DIOCGSTRIPEOFFSET, &psectoff);
-		// strlcpy(arg.name, "GEOM::candelete", sizeof(arg.name));
-		// arg.len = sizeof(arg.value.i);
-		// if (ioctl(fd, DIOCGATTR, &arg) == 0)
-		// 	candelete = arg.value.i;
-		// if (ioctl(fd, DIOCGPROVIDERNAME, name) == 0)
-		// 	geom = 1;
-	} else
-		psectsz = sbuf.st_blksize;
-
-	if (ssopt != 0) {
-		if (!powerof2(ssopt) || !powerof2(pssopt) || ssopt < 512 ||
-		    ssopt > pssopt) {
-			fprintf(stderr, "Invalid sector size %d/%d\n",
-			    ssopt, pssopt);
-			goto err;
-		}
-
-		// /*
-		//  * Some backend drivers (e.g. cd0, ada0) require that the I/O
-		//  * size be a multiple of the device's sector size.
-		//  *
-		//  * Validate that the emulated sector size complies with this
-		//  * requirement.
-		//  */
-		// if (S_ISCHR(sbuf.st_mode)) {
-		// 	if (ssopt < sectsz || (ssopt % sectsz) != 0) {
-		// 		fprintf(stderr, "Sector size %d incompatible "
-		// 		    "with underlying device sector size %d\n",
-		// 		    ssopt, sectsz);
-		// 		goto err;
-		// 	}
-		// }
-
-		sectsz = ssopt;
-		psectsz = pssopt;
-		psectoff = 0;
-	}
-
-	bc = calloc(1, sizeof(struct blockif_ctxt));
 	if (bc == NULL) {
-		perror("calloc");
-		goto err;
+		perror("Could not open backing file");
+		return (NULL);
 	}
 
-	bc->bc_magic = (int) BLOCKIF_SIG;
-	bc->bc_fd = fd;
-	bc->bc_ischr = S_ISCHR(sbuf.st_mode);
-	bc->bc_isgeom = geom;
-	bc->bc_candelete = candelete;
+	bc->bc_magic = (int)BLOCKIF_SIG;
+	bc->bc_candelete = 0;
 	bc->bc_rdonly = ro;
-	bc->bc_size = size;
-	bc->bc_sectsz = sectsz;
-	bc->bc_psectsz = (int) psectsz;
-	bc->bc_psectoff = (int) psectoff;
 	pthread_mutex_init(&bc->bc_mtx, NULL);
 	pthread_cond_init(&bc->bc_cond, NULL);
 	TAILQ_INIT(&bc->bc_freeq);
@@ -572,13 +369,10 @@ blockif_open(const char *optstr, UNUSED const char *ident)
 
 	for (i = 0; i < BLOCKIF_NUMTHR; i++) {
 		pthread_create(&bc->bc_btid[i], NULL, blockif_thr, bc);
+		snprintf(tname, sizeof(tname), "blk-%s-%d", ident, i);
 	}
 
 	return (bc);
-err:
-	if (fd >= 0)
-		close(fd);
-	return (NULL);
 }
 
 static int
@@ -741,8 +535,7 @@ blockif_close(struct blockif_ctxt *bc)
 	 * Release resources
 	 */
 	bc->bc_magic = 0;
-	close(bc->bc_fd);
-	free(bc);
+	vdsk_close(bc);
 
 	return (0);
 }
@@ -761,7 +554,7 @@ blockif_chs(struct blockif_ctxt *bc, uint16_t *c, uint8_t *h, uint8_t *s)
 
 	assert(bc->bc_magic == ((int) BLOCKIF_SIG));
 
-	sectors = bc->bc_size / bc->bc_sectsz;
+	sectors = vdsk_capacity(bc) / vdsk_sectorsize(bc);
 
 	/* Clamp the size to the largest possible with CHS */
 	if (sectors > 65535LL*16*255)
@@ -803,22 +596,22 @@ off_t
 blockif_size(struct blockif_ctxt *bc)
 {
 	assert(bc->bc_magic == ((int) BLOCKIF_SIG));
-	return (bc->bc_size);
+	return (vdsk_capacity(bc));
 }
 
 int
 blockif_sectsz(struct blockif_ctxt *bc)
 {
 	assert(bc->bc_magic == ((int) BLOCKIF_SIG));
-	return (bc->bc_sectsz);
+	return (vdsk_sectorsize(bc));
 }
 
 void
 blockif_psectsz(struct blockif_ctxt *bc, int *size, int *off)
 {
 	assert(bc->bc_magic == ((int) BLOCKIF_SIG));
-	*size = bc->bc_psectsz;
-	*off = bc->bc_psectoff;
+	*size = vdsk_sectorsize(bc);
+	*off = 0;
 }
 
 int

@@ -67,10 +67,18 @@ FIRMWARE_SRC := \
 	src/firmware/kexec.c \
 	src/firmware/fbsd.c
 
+LIBVDSK_SRC := \
+	src/libvdsk/vdsk.c \
+	src/libvdsk/raw.c \
+	src/libvdsk/qcow.c \
+	src/libvdsk/vhd.c \
+	src/libvdsk/vmdk.c
+
 SRC := \
 	$(VMM_SRC) \
 	$(XHYVE_SRC) \
-	$(FIRMWARE_SRC)
+	$(FIRMWARE_SRC) \
+	$(LIBVDSK_SRC)
 
 OBJ := $(SRC:src/%.c=build/%.o)
 DEP := $(OBJ:%.o=%.d)
