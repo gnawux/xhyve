@@ -62,6 +62,11 @@
 		3F3FFA911BF7C6A7004C89A1 /* xhyve.c in Sources */ = {isa = PBXBuildFile; fileRef = 3F3FFA5A1BF7C6A7004C89A1 /* xhyve.c */; };
 		3F3FFA921BF7C6A7004C89A1 /* xmsr.c in Sources */ = {isa = PBXBuildFile; fileRef = 3F3FFA5B1BF7C6A7004C89A1 /* xmsr.c */; };
 		3F3FFA971BF7CC0E004C89A1 /* xhyve.1 in Install Man Pages */ = {isa = PBXBuildFile; fileRef = 3F3FF9E41BF7C5DC004C89A1 /* xhyve.1 */; };
+		C38306CA1C2BC6160046AB24 /* qcow.c in Sources */ = {isa = PBXBuildFile; fileRef = C38306C41C2BC6160046AB24 /* qcow.c */; };
+		C38306CB1C2BC6160046AB24 /* raw.c in Sources */ = {isa = PBXBuildFile; fileRef = C38306C51C2BC6160046AB24 /* raw.c */; };
+		C38306CC1C2BC6160046AB24 /* vdsk.c in Sources */ = {isa = PBXBuildFile; fileRef = C38306C71C2BC6160046AB24 /* vdsk.c */; };
+		C38306CD1C2BC6160046AB24 /* vhd.c in Sources */ = {isa = PBXBuildFile; fileRef = C38306C81C2BC6160046AB24 /* vhd.c */; };
+		C38306CE1C2BC6160046AB24 /* vmdk.c in Sources */ = {isa = PBXBuildFile; fileRef = C38306C91C2BC6160046AB24 /* vmdk.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -212,6 +217,14 @@
 		3FB651A01BF7CD4500ED886F /* x86.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = x86.h; sourceTree = "<group>"; };
 		3FB651A11BF7CD4500ED886F /* xhyve.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = xhyve.h; sourceTree = "<group>"; };
 		3FB651A21BF7CD4500ED886F /* xmsr.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = xmsr.h; sourceTree = "<group>"; };
+		C38306C21C2BC5D60046AB24 /* vdsk.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = vdsk.h; path = libvdsk/vdsk.h; sourceTree = "<group>"; };
+		C38306C41C2BC6160046AB24 /* qcow.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = qcow.c; path = libvdsk/qcow.c; sourceTree = "<group>"; };
+		C38306C51C2BC6160046AB24 /* raw.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = raw.c; path = libvdsk/raw.c; sourceTree = "<group>"; };
+		C38306C61C2BC6160046AB24 /* vdsk_int.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = vdsk_int.h; path = libvdsk/vdsk_int.h; sourceTree = "<group>"; };
+		C38306C71C2BC6160046AB24 /* vdsk.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = vdsk.c; path = libvdsk/vdsk.c; sourceTree = "<group>"; };
+		C38306C81C2BC6160046AB24 /* vhd.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = vhd.c; path = libvdsk/vhd.c; sourceTree = "<group>"; };
+		C38306C91C2BC6160046AB24 /* vmdk.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = vmdk.c; path = libvdsk/vmdk.c; sourceTree = "<group>"; };
+		C38306CF1C2BC6380046AB24 /* endian.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = endian.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -288,6 +301,7 @@
 		3F3FFA1D1BF7C6A7004C89A1 /* src */ = {
 			isa = PBXGroup;
 			children = (
+				C38306C31C2BC6040046AB24 /* libvdsk */,
 				3F3FFA251BF7C6A7004C89A1 /* firmware */,
 				3F3FFA401BF7C6A7004C89A1 /* vmm */,
 				3F3FFA1E1BF7C6A7004C89A1 /* acpi.c */,
@@ -399,6 +413,7 @@
 		3FB6515B1BF7CD4500ED886F /* xhyve */ = {
 			isa = PBXGroup;
 			children = (
+				C38306C11C2BC5C20046AB24 /* libvdsk */,
 				3FB6515C1BF7CD4500ED886F /* acpi.h */,
 				3FB6515D1BF7CD4500ED886F /* ahci.h */,
 				3FB6515E1BF7CD4500ED886F /* block_if.h */,
@@ -436,6 +451,7 @@
 		3FB6516D1BF7CD4500ED886F /* support */ = {
 			isa = PBXGroup;
 			children = (
+				C38306CF1C2BC6380046AB24 /* endian.h */,
 				3FB6516E1BF7CD4500ED886F /* acpi_hpet.h */,
 				3FB6516F1BF7CD4500ED886F /* apicreg.h */,
 				3FB651701BF7CD4500ED886F /* ata.h */,
@@ -507,6 +523,27 @@
 				3FB651931BF7CD4500ED886F /* vrtc.h */,
 			);
 			path = io;
+			sourceTree = "<group>";
+		};
+		C38306C11C2BC5C20046AB24 /* libvdsk */ = {
+			isa = PBXGroup;
+			children = (
+				C38306C21C2BC5D60046AB24 /* vdsk.h */,
+			);
+			name = libvdsk;
+			sourceTree = "<group>";
+		};
+		C38306C31C2BC6040046AB24 /* libvdsk */ = {
+			isa = PBXGroup;
+			children = (
+				C38306C41C2BC6160046AB24 /* qcow.c */,
+				C38306C51C2BC6160046AB24 /* raw.c */,
+				C38306C61C2BC6160046AB24 /* vdsk_int.h */,
+				C38306C71C2BC6160046AB24 /* vdsk.c */,
+				C38306C81C2BC6160046AB24 /* vhd.c */,
+				C38306C91C2BC6160046AB24 /* vmdk.c */,
+			);
+			name = libvdsk;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -590,10 +627,13 @@
 				3F3FFA851BF7C6A7004C89A1 /* vrtc.c in Sources */,
 				3F3FFA921BF7C6A7004C89A1 /* xmsr.c in Sources */,
 				3F3FFA7A1BF7C6A7004C89A1 /* uart_emul.c in Sources */,
+				C38306CC1C2BC6160046AB24 /* vdsk.c in Sources */,
 				3F3FFA8A1BF7C6A7004C89A1 /* vmm_instruction_emul.c in Sources */,
 				3F3FFA841BF7C6A7004C89A1 /* vpmtmr.c in Sources */,
 				3F3FFA801BF7C6A7004C89A1 /* vatpit.c in Sources */,
+				C38306CE1C2BC6160046AB24 /* vmdk.c in Sources */,
 				3F3FFA901BF7C6A7004C89A1 /* x86.c in Sources */,
+				C38306CB1C2BC6160046AB24 /* raw.c in Sources */,
 				3F3FFA631BF7C6A7004C89A1 /* kexec.c in Sources */,
 				3F3FFA5F1BF7C6A7004C89A1 /* block_if.c in Sources */,
 				3F3FFA8E1BF7C6A7004C89A1 /* vmm_stat.c in Sources */,
@@ -611,6 +651,7 @@
 				3F3FFA771BF7C6A7004C89A1 /* rtc.c in Sources */,
 				3F3FFA8B1BF7C6A7004C89A1 /* vmm_ioport.c in Sources */,
 				3F3FFA671BF7C6A7004C89A1 /* mem.c in Sources */,
+				C38306CD1C2BC6160046AB24 /* vhd.c in Sources */,
 				3F3FFA8F1BF7C6A7004C89A1 /* vmm_util.c in Sources */,
 				3F3FFA791BF7C6A7004C89A1 /* task_switch.c in Sources */,
 				3F3FFA6B1BF7C6A7004C89A1 /* pci_ahci.c in Sources */,
@@ -626,6 +667,7 @@
 				3F3FFA861BF7C6A7004C89A1 /* vmm.c in Sources */,
 				3F3FFA911BF7C6A7004C89A1 /* xhyve.c in Sources */,
 				3F3FFA831BF7C6A7004C89A1 /* vlapic.c in Sources */,
+				C38306CA1C2BC6160046AB24 /* qcow.c in Sources */,
 				3F3FFA741BF7C6A7004C89A1 /* pci_virtio_rnd.c in Sources */,
 				3F3FFA761BF7C6A7004C89A1 /* post.c in Sources */,
 				3F3FFA601BF7C6A7004C89A1 /* consport.c in Sources */,
